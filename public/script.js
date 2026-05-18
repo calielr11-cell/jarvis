@@ -1775,7 +1775,7 @@ TOM: senhor sempre. Parceiro leal. Confiante total.`,
               threshold: 0.5,
               prefix_padding_ms: 300,
               silence_duration_ms: 700,
-              create_response: false,   // ← NÃO responde automaticamente: só quando chamado
+              create_response: true,    // ← responde a tudo que o senhor falar
               interrupt_response: true
             },
             transcription: { model: 'whisper-1' }
@@ -1867,17 +1867,19 @@ TOM: senhor sempre. Parceiro leal. Confiante total.`,
                 addTerminalLine('[reunião] Solicitado — respondendo pontualmente.', 'info-line');
               }
 
-              // ── SÓ RESPONDE SE JARVIS FOR CHAMADO (cria_response:false) ──
-              const calledByName = /\bjarvis\b/i.test(t);
-              if (!calledByName) break; // silêncio total, zero tokens
+              // ── CANCELA se pedido explicitamente ──
+              if (/\b(cancela|cancele|cancel|para|pare|stop)\b/i.test(lower)) {
+                if (realtimeWS?.readyState === WebSocket.OPEN) {
+                  realtimeWS.send(JSON.stringify({ type: 'response.cancel' }));
+                }
+                addTerminalLine('[ cancelado ]', 'info-line');
+                break;
+              }
 
               addTerminalLine('> ' + t, 'user-line');
               window._pendingTranscript = t;
               window._dispatchedThisTurn = false;
-              // Dispara GPT-4o Realtime — ele responde E pode chamar execute_task
-              if (realtimeWS?.readyState === WebSocket.OPEN) {
-                realtimeWS.send(JSON.stringify({ type: 'response.create' }));
-              }
+              // create_response:true já disparou — não precisamos chamar response.create manualmente
               // Fallback: se GPT não chamar execute_task em 4s, Claude executa direto
               // (para tarefas que GPT pode não reconhecer como function call)
               clearTimeout(window._rt2FallbackTimer);
