@@ -816,48 +816,8 @@ async function analyzeScreen(userMessage) {
 screenBtn?.addEventListener('click', captureScreen);
 
 // ========== CONCLAVE TOGGLE ==========
-let conclaveEnabled = localStorage.getItem('jarvis-conclave') !== 'false';
-
-function setMegaActiveUI(active) {
-  const gauges = document.querySelector('.conclave-gauges');
-  const megaPanel = document.querySelector('.mega-brain-panel, .mega-panel, #mega-brain');
-  const chip = document.querySelector('.mega-chip');
-  if (active) {
-    gauges?.classList.add('mega-active');
-    gauges?.parentElement?.classList.add('mega-active');
-    chip?.classList.remove('conclave-off');
-    // Iluminar labels dos agentes
-    document.querySelectorAll('.conclave-gauge').forEach((g, i) => {
-      const label = g.querySelector('.cg-label, .gauge-label, span');
-      if (label) label.style.fontWeight = 'bold';
-    });
-  } else {
-    gauges?.classList.remove('mega-active');
-    gauges?.parentElement?.classList.remove('mega-active');
-    chip?.classList.add('conclave-off');
-  }
-}
-
-function initConclaveToggle() {
-  const cb = document.getElementById('conclave-checkbox');
-  const chip = cb?.closest('.mega-chip');
-  if (!cb) return;
-
-  cb.checked = conclaveEnabled;
-  setMegaActiveUI(conclaveEnabled);
-
-  cb.addEventListener('change', () => {
-    conclaveEnabled = cb.checked;
-    localStorage.setItem('jarvis-conclave', String(conclaveEnabled));
-    setMegaActiveUI(conclaveEnabled);
-    addTerminalLine(
-      conclaveEnabled
-        ? (currentLang === 'BR' ? '[mega-cérebro] ✅ Modo Mega Cérebro ATIVADO — Crítico + Advogado + Sintetizador online.' : '[mega-brain] ✅ Mega Brain Mode ACTIVE.')
-        : (currentLang === 'BR' ? '[mega-cérebro] ⏹ Modo Mega Cérebro desativado.' : '[mega-brain] ⏹ Mega Brain Mode OFF.'),
-      conclaveEnabled ? 'info-line' : 'system-line'
-    );
-  });
-}
+// Conclave removido — JARVIS opera como inteligência única
+function initConclaveToggle() { /* removido */ }
 
 // ========== LANGUAGE STATE ==========
 let currentLang = localStorage.getItem('jarvis-lang') || 'BR';
@@ -1311,7 +1271,7 @@ async function sendMessage(text, fromVoice = false) {
   let ackPromise = null;
 
   try {
-    const body = { message: text, fromVoice, language: currentLang, conclaveEnabled };
+    const body = { message: text, fromVoice, language: currentLang };
     if (currentAttachment) {
       body.attachmentId = currentAttachment.id;
       currentAttachment = null;
@@ -2160,7 +2120,7 @@ async function handleRealtimeTask(callId, argsJson) {
     const r = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: request, fromVoice: true, language: currentLang, conclaveEnabled })
+      body: JSON.stringify({ message: request, fromVoice: true, language: currentLang })
     });
     const reader = r.body.getReader();
     const decoder = new TextDecoder();

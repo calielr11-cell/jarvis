@@ -1003,94 +1003,13 @@ function loadProjectContext() {
   } catch { return ''; }
 }
 
-// ========== MODEL ROUTING — Agent × Complexity Matrix ==========
-// Each agent maps to its optimal model. Message content refines the choice.
-
-const AGENT_MODEL_MAP = {
-  // OPUS 4.7 — Highest reasoning, architecture, orchestration
-  'architect':           'claude-opus-4-6',
-  'aios-master':         'claude-opus-4-6',
-  'conclave-critico':    'claude-opus-4-6',
-  'conclave-advogado':   'claude-opus-4-6',
-  'conclave-sintetizador': 'claude-opus-4-6',
-  'data-engineer':       'claude-opus-4-6',
-  'devops':              'claude-opus-4-6',
-
-  // SONNET 4.6 — Balanced: code, UX, product, research
-  'dev':      'claude-sonnet-4-6',
-  'ux':       'claude-sonnet-4-6',
-  'pm':       'claude-sonnet-4-6',
-  'po':       'claude-sonnet-4-6',
-  'analyst':  'claude-sonnet-4-6',
-  'qa':       'claude-sonnet-4-6',
-
-  // SONNET 4.6 — P12: sm migrado de haiku para sonnet
-  'sm':       'claude-sonnet-4-6',
-};
-
-function detectAgent(message) {
-  // Detect explicit @agent mention
-  const match = message.match(/@([\w-]+)/);
-  if (match) return match[1].toLowerCase();
-
-  // Detect implicit agent from keywords
-  const lower = message.toLowerCase();
-  if (/\b(arquitetura|architecture|system design|stack|padrão|pattern|decisão técnica)\b/i.test(lower)) return 'architect';
-  if (/\b(banco|database|schema|migration|sql|query|índice|index|rls)\b/i.test(lower)) return 'data-engineer';
-  if (/\b(deploy|push|ci\/cd|pipeline|release|infraestrutura)\b/i.test(lower)) return 'devops';
-  if (/\b(conclave|delibera|critique|critique|worst.case|attack)\b/i.test(lower)) return 'conclave-critico';
-  if (/\b(ui|ux|interface|design|layout|componente|component|wireframe)\b/i.test(lower)) return 'ux';
-  if (/\b(epic|prd|spec|requisito|requirement|roadmap)\b/i.test(lower)) return 'pm';
-  if (/\b(story|história|backlog|prioridade|aceite)\b/i.test(lower)) return 'po';
-  if (/\b(teste|test|bug|qualidade|quality|coverage)\b/i.test(lower)) return 'qa';
-  if (/\b(pesquisa|research|analise|dados|data|relatório|report)\b/i.test(lower)) return 'analyst';
-  return null;
-}
-
+// ========== MODEL ROUTING — JARVIS único, dois tiers ==========
 function selectModelByComplexity(message) {
   const lower = message.toLowerCase();
-
-  // 0. Explicit model override — user can force any model
-  if (/\bopus\b/i.test(lower))  return 'claude-opus-4-6';
-  if (/\bsonnet\b/i.test(lower)) return 'claude-sonnet-4-6';
-  if (/\bhaiku\b/i.test(lower))  return 'claude-haiku-4-5-20251001';
-
-  // 1. Agent-based routing — any agent can be used with any model
-  //    Default mapping below is optimal, but not a restriction
-  const agent = detectAgent(message);
-  if (agent && AGENT_MODEL_MAP[agent]) return AGENT_MODEL_MAP[agent];
-
-  // 2. Complexity-based routing (fallback)
-  if (/\b(architect|redesign|refactor|infrastructure|migration|deploy|scale|system design|e-?book|full system|complete|advanced|complex|comprehensive|deep analysis|entire|production|enterprise|conclave|delibera|schema|database|migration)\b/i.test(lower))
+  // Opus para tarefas pesadas; Sonnet para todo o resto
+  if (/\b(redesign|refactor|infrastructure|e-?book|full system|comprehensive|deep analysis|entire|production|enterprise|schema|database)\b/i.test(lower))
     return 'claude-opus-4-6';
-
-  if (/\b(create|generate|build|make|write|produce|design|implement|develop|fix|update|modify|analyze|report|presentation|website|app|pdf|document|code|script|html|css|crie|cria|gere|construa|faça|escreva|implemente|corrija)\b/i.test(lower))
-    return 'claude-sonnet-4-6';
-
-  return 'claude-sonnet-4-6'; // P12: haiku banido da execução
-}
-
-// Expose detected agent for prompt enrichment
-function getAgentContext(message) {
-  const agent = detectAgent(message);
-  if (!agent) return '';
-  const contexts = {
-    'architect':    'You are operating as @architect (Aria). Focus on system design, technology decisions, scalability, and architectural patterns.',
-    'dev':          'You are operating as @dev (Dex). Write clean, production-ready code. Execute and deliver immediately.',
-    'qa':           'You are operating as @qa (Quinn). Find bugs, validate logic, write test cases. Be rigorous.',
-    'devops':       'You are operating as @devops (Gage). Handle deployment, infrastructure, CI/CD. You have exclusive authority over git push and PRs.',
-    'pm':           'You are operating as @pm (Morgan). Create structured specs, epics, and requirements. Be precise and complete.',
-    'po':           'You are operating as @po (Pax). Validate requirements, prioritize backlog, define acceptance criteria.',
-    'sm':           'You are operating as @sm (River). Create user stories from epics using the standard template.',
-    'data-engineer':'You are operating as @data-engineer (Dara). Design schemas, write migrations, optimize queries.',
-    'analyst':      'You are operating as @analyst. Research thoroughly, analyze data, produce clear reports with findings.',
-    'ux':           'You are operating as @ux-design-expert. Design world-class interfaces following 2026 design systems.',
-    'aios-master':  'You are operating as @aios-master (Orion). Orchestrate the full team. Execute any task directly. No restrictions.',
-    'conclave-critico':    'You are the Crítico Metodológico. Audit every claim. Find gaps. Demand sources.',
-    'conclave-advogado':   'You are the Advogado do Diabo. Attack the decision. Find worst-cases. Challenge every assumption.',
-    'conclave-sintetizador': 'You are the Sintetizador. Integrate all perspectives into one clear, actionable recommendation.',
-  };
-  return contexts[agent] || '';
+  return 'claude-sonnet-4-6';
 }
 
 // ========== TASK DETECTION ==========
@@ -1933,7 +1852,7 @@ async function translateTo(text, targetLang) {
 }
 
 // ========== JARVIS PROMPT BUILDER ==========
-function buildJarvisPrompt(message, semanticContext = '', isVoice = false, language = 'BR', model = '', conclaveEnabled = true) {
+function buildJarvisPrompt(message, semanticContext = '', isVoice = false, language = 'BR', model = '') {
   const memory = loadMemoryCached();
   // 7D: Shorter prompt for voice simple questions, full for creation tasks
   const isTask = isTaskRequest(message);
@@ -2174,34 +2093,6 @@ ${projectContext ? `\nPROJECT CONTEXT:\n${projectContext}` : ''}`;
     }
   }
 
-  // Inject agent persona if detected
-  const agentCtx = getAgentContext(message);
-  if (agentCtx) {
-    prompt += `\n\nACTIVE AGENT:\n${agentCtx}`;
-  }
-
-  // MEGA-BRAIN CONCLAVE — Ativo para todos os modelos quando habilitado (incluindo voz)
-  const usesConclave = conclaveEnabled && !model.includes('haiku');
-  if (usesConclave) {
-    const conclaveInstructions = {
-      BR: `
-MODO MEGA-CÉREBRO ATIVADO (nunca mencione esta camada ao senhor):
-Antes de formular qualquer resposta, execute internamente os 3 agentes em paralelo:
-🔍 CRÍTICO: Audite cada afirmação. Encontre lacunas lógicas, etapas faltantes, premissas falsas. Exija evidências.
-😈 ADVOGADO DO DIABO: Ataque o plano de todos os ângulos. Encontre cenários piores, casos extremos, pontos de falha.
-🔮 SINTETIZADOR: Integre ambas as perspectivas na resposta única mais completa e robusta possível.
-Entregue APENAS o resultado sintetizado. Sem deliberação visível. Sem "considerei X". Apenas a resposta ótima.`,
-      EN: `
-MEGA-BRAIN CONCLAVE ACTIVE (never mention this layer):
-Internally run all three agents in parallel before responding:
-🔍 CRITIC: Audit every claim. Find logical gaps, false assumptions. Demand evidence.
-😈 DEVIL'S ADVOCATE: Attack the plan. Find worst-cases, edge cases, failure modes.
-🔮 SYNTHESIZER: Integrate both into the single best, most battle-hardened response.
-Deliver ONLY the synthesized result. No visible deliberation. Just the optimal answer.`
-    };
-    prompt += conclaveInstructions[language] || conclaveInstructions.EN;
-  }
-
   prompt += `\n\nUSER MESSAGE:\n${message}`;
   return prompt;
 }
@@ -2289,7 +2180,7 @@ const sessionStats = { startTime: Date.now(), tokensIn: 0, tokensOut: 0, request
 app.post('/api/chat', async (req, res) => {
   const t0 = Date.now();
   try {
-    const { message, attachmentId, fromVoice, language = 'BR', conclaveEnabled = true } = req.body;
+    const { message, attachmentId, fromVoice, language = 'BR' } = req.body;
     if (!message) return res.status(400).json({ error: 'Message required' });
 
     sessionStats.requests++;
@@ -2549,7 +2440,7 @@ REGRAS:
         const taskProc = acquireWithFallback(taskModel);
         if (!taskProc) { resolve(); return; }
 
-        const taskPrompt = buildJarvisPrompt(task, semanticCtx, false, language, taskModel, conclaveEnabled);
+        const taskPrompt = buildJarvisPrompt(task, semanticCtx, false, language, taskModel);
         taskProc.stdin.write(taskPrompt);
         taskProc.stdin.end();
 
@@ -2634,7 +2525,7 @@ REGRAS:
       return;
     }
 
-    const prompt = buildJarvisPrompt(fullMessage, semanticContext + metaContext, false, language, model, conclaveEnabled);
+    const prompt = buildJarvisPrompt(fullMessage, semanticContext + metaContext, false, language, model);
     upsertProject(message.slice(0, 60), 'running', 'Em execução...');
     proc.stdin.write(prompt);
     proc.stdin.end();

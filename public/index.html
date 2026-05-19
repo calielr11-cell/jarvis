@@ -206,35 +206,6 @@
 
       <!-- ═══ BOTTOM HUD — MEGA-BRAIN + OBSIDIAN + METRICS (expanded) ═══ -->
       <div class="hud-bottom">
-        <!-- Mega-Brain Conclave -->
-        <div class="hud-bottom-card">
-          <div class="hud-section-title">◉ MEGA-BRAIN</div>
-          <!-- Conclave circular indicators -->
-          <div class="conclave-gauges">
-            <div class="conclave-gauge" data-member="critico">
-              <div class="cg-ring" style="--value:0"><div class="cg-inner">🔍</div></div>
-              <span class="cg-label">Critico</span>
-            </div>
-            <div class="conclave-gauge" data-member="advogado">
-              <div class="cg-ring" style="--value:0"><div class="cg-inner">😈</div></div>
-              <span class="cg-label">Advogado</span>
-            </div>
-            <div class="conclave-gauge" data-member="sintetizador">
-              <div class="cg-ring" style="--value:0"><div class="cg-inner">🔮</div></div>
-              <span class="cg-label">Sintetiz.</span>
-            </div>
-          </div>
-          <div class="entity-list entity-row-h">
-            <div class="entity-row" data-entity="conclave-critico"><span class="entity-dot"></span><span class="entity-name">Critico</span></div>
-            <div class="entity-row" data-entity="conclave-advogado"><span class="entity-dot"></span><span class="entity-name">Advogado</span></div>
-            <div class="entity-row" data-entity="conclave-sintetizador"><span class="entity-dot"></span><span class="entity-name">Sintetiz.</span></div>
-          </div>
-          <button class="hud-ingest-btn" id="btn-ingest" title="Alimentar o Mega-Brain">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="6"/><path d="M12 9v6m-3-3h6"/></svg>
-            <span>Ingerir Conhecimento</span>
-          </button>
-        </div>
-
         <!-- Obsidian Brain -->
         <div class="hud-bottom-card hud-bottom-brain" id="btn-brain" title="Explorar o Obsidian Brain">
           <div class="hud-section-title">◉ OBSIDIAN BRAIN</div>
@@ -495,15 +466,6 @@
           <option value="echo">echo — Nítido, preciso</option>
           <option value="shimmer">shimmer — Suave, gentil</option>
         </select>
-      </div>
-      <!-- Conclave toggle (hidden — preserva funcionalidade do script.js) -->
-      <div class="config-group">
-        <label class="config-label">Conclave Mega-Brain</label>
-        <label class="toggle">
-          <input type="checkbox" id="conclave-checkbox" checked>
-          <span class="toggle-slider"></span>
-        </label>
-        <span class="config-hint">3 AI minds analyze every strategic decision</span>
       </div>
     </div>
   </div>
