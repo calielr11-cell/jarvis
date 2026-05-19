@@ -1452,6 +1452,141 @@ let continuousTimer = null;
 
 const VAD_SILENCE_MS = 1100; // fastest: stop after 1.1s of silence
 
+// ========= VOICE IDENTITY — Filtra voz pelo fingerprint do senhor =========
+const VOICE_PROFILE_KEY = 'jarvis_owner_voice_v1';
+let voiceProfile = null;         // { pitchMean, pitchStd, zcrMean, zcrStd, enrolledAt, frames }
+let speakerCheckEnabled = false; // true após cadastro
+let isEnrolling = false;
+let enrollFrames = [];
+let enrollTimer = null;
+const ENROLL_SECS = 12;
+
+// Rolling window de histórico de match (últimos N frames com voz)
+const SPEAKER_WINDOW = 18;
+let speakerHistory = [];
+let _lastUnknownNotify = 0;
+
+function loadVoiceProfile() {
+  try {
+    const s = localStorage.getItem(VOICE_PROFILE_KEY);
+    if (s) { voiceProfile = JSON.parse(s); speakerCheckEnabled = true; }
+  } catch {}
+}
+
+function saveVoiceProfile(p) {
+  try { localStorage.setItem(VOICE_PROFILE_KEY, JSON.stringify(p)); } catch {}
+}
+
+// Extrai pitch (autocorrelação) + ZCR de buffer f32 a 24kHz
+function extractSpeakerFeatures(f32) {
+  const n = f32.length;
+  let ss = 0;
+  for (let i = 0; i < n; i++) ss += f32[i] * f32[i];
+  const rms = Math.sqrt(ss / n);
+  if (rms < 0.015) return null; // silêncio
+
+  let zcr = 0;
+  for (let i = 1; i < n; i++) if ((f32[i] >= 0) !== (f32[i-1] >= 0)) zcr++;
+  zcr /= n;
+
+  // Autocorrelação — faixa 80–450Hz a 24kHz
+  const minLag = 53, maxLag = Math.min(300, n >> 1);
+  let maxCorr = 0, pitchLag = 0;
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    let c = 0;
+    for (let i = 0; i < n - lag; i++) c += f32[i] * f32[i + lag];
+    if (c > maxCorr) { maxCorr = c; pitchLag = lag; }
+  }
+  const voiced = maxCorr > ss * 0.25 && pitchLag > 0;
+  const pitch = voiced ? 24000 / pitchLag : 0;
+  return { pitch, zcr, rms, voiced };
+}
+
+// Verifica se o frame atual bate com o perfil cadastrado
+function isSpeakerMatch(feat) {
+  if (!voiceProfile || !feat || !feat.voiced || feat.pitch === 0) return null;
+  const { pitchMean, pitchStd, zcrMean, zcrStd } = voiceProfile;
+  const pitchOk = Math.abs(feat.pitch - pitchMean) < Math.max(2.8 * pitchStd, 28);
+  const zcrOk   = Math.abs(feat.zcr   - zcrMean)   < Math.max(2.8 * zcrStd,  0.025);
+  return pitchOk && zcrOk;
+}
+
+// Retorna true se o dono está falando (baseado no histórico rolante)
+function isOwnerSpeaking() {
+  if (!speakerCheckEnabled || !voiceProfile) return true;
+  const valid = speakerHistory.filter(v => v !== null);
+  if (valid.length < 6) return true;
+  return valid.filter(Boolean).length / valid.length >= 0.52;
+}
+
+function startVoiceEnrollment() {
+  isEnrolling = true;
+  enrollFrames = [];
+  speakerCheckEnabled = false;
+  voiceProfile = null;
+  speakerHistory = [];
+  addTerminalLine(`[voz] 🎙 Cadastrando — fale normalmente por ${ENROLL_SECS}s...`, 'info-line');
+  let remaining = ENROLL_SECS;
+  const tick = setInterval(() => { remaining--; if (remaining > 0 && remaining <= 5) addTerminalLine(`[voz] ${remaining}s...`, 'system-line'); }, 1000);
+  enrollTimer = setTimeout(() => { clearInterval(tick); finishVoiceEnrollment(); }, ENROLL_SECS * 1000);
+}
+
+function finishVoiceEnrollment() {
+  isEnrolling = false;
+  const voiced = enrollFrames.filter(f => f && f.voiced && f.pitch > 0);
+  if (voiced.length < 15) {
+    addTerminalLine('[voz] ⚠ Poucos frames detectados — fale mais alto e tente novamente.', 'warn-line');
+    const vbtn = document.getElementById('voice-id-btn');
+    if (vbtn) vbtn.style.color = '';
+    return;
+  }
+  const mean = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+  const std  = (arr, m) => Math.sqrt(arr.reduce((a, b) => a + (b - m) ** 2, 0) / arr.length);
+  const pitches = voiced.map(f => f.pitch), zcrs = voiced.map(f => f.zcr);
+  const pitchMean = mean(pitches), pitchStd = std(pitches, pitchMean);
+  const zcrMean   = mean(zcrs),   zcrStd   = std(zcrs, zcrMean);
+  voiceProfile = { pitchMean, pitchStd, zcrMean, zcrStd, enrolledAt: new Date().toISOString(), frames: voiced.length };
+  saveVoiceProfile(voiceProfile);
+  speakerCheckEnabled = true;
+  addTerminalLine(`[voz] ✅ Voz do senhor cadastrada — pitch ${pitchMean.toFixed(0)}±${pitchStd.toFixed(0)} Hz | ${voiced.length} frames | Proteção ativa.`, 'info-line');
+  const vbtn = document.getElementById('voice-id-btn');
+  if (vbtn) { vbtn.style.color = 'var(--cyan)'; vbtn.title = 'Voz cadastrada ✓ — clique para recadastrar'; }
+}
+
+function initVoiceIdentityBtn() {
+  loadVoiceProfile();
+  const btn = document.createElement('button');
+  btn.id = 'voice-id-btn';
+  btn.className = 'screen-btn';
+  btn.title = voiceProfile ? 'Voz cadastrada ✓ — clique para recadastrar' : 'Cadastrar voz do senhor';
+  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+    <line x1="12" y1="19" x2="12" y2="22"/>
+    <line x1="8" y1="22" x2="16" y2="22"/>
+    <circle cx="19" cy="6" r="3" fill="currentColor" stroke="none" opacity="0.6"/>
+    <text x="17.2" y="8" font-size="4" fill="white" font-weight="bold">ID</text>
+  </svg>`;
+  if (voiceProfile) btn.style.color = 'var(--cyan)';
+  btn.addEventListener('click', async () => {
+    if (isEnrolling) {
+      clearTimeout(enrollTimer); isEnrolling = false;
+      addTerminalLine('[voz] Cadastro cancelado.', 'warn-line');
+      btn.style.color = voiceProfile ? 'var(--cyan)' : '';
+      return;
+    }
+    btn.style.color = '#ffd700';
+    if (!realtimeActive) {
+      addTerminalLine('[voz] Iniciando modo voz para cadastro...', 'info-line');
+      await startRealtime();
+      await new Promise(r => setTimeout(r, 800));
+    }
+    startVoiceEnrollment();
+  });
+  const sendBtn = document.getElementById('send-btn');
+  if (sendBtn) sendBtn.parentNode.insertBefore(btn, sendBtn);
+}
+
 // Continuous mode toggle button (injected into input bar)
 function initContinuousBtn() {
   const btn = document.createElement('button');
@@ -1599,10 +1734,11 @@ function startMeetingMode() {
   // Garante realtime ativo
   if (!realtimeActive) startRealtimeAlwaysOn();
   else if (realtimeWS?.readyState === WebSocket.OPEN) {
-    realtimeWS.send(JSON.stringify({ type: 'session.update', session: { type: 'realtime',
-      audio: { input: { turn_detection: { type: 'server_vad', threshold: 0.4,
+    realtimeWS.send(JSON.stringify({ type: 'session.update', session: {
+      turn_detection: { type: 'server_vad', threshold: 0.4,
         prefix_padding_ms: 300, silence_duration_ms: 800,
-        create_response: false, interrupt_response: false } } } } }));
+        create_response: false, interrupt_response: false }
+    }}));
   }
 
   // Resumo periódico a cada 4 minutos
@@ -1760,31 +1896,27 @@ TOM: senhor sempre. Parceiro leal. Confiante total.`,
       setTimeout(() => reject(new Error('Connection timeout (10s)')), 10000);
     });
 
-    // Configure session — GA API schema validado (session.created revela estrutura real)
+    // Configure session — GA API schema correto (campos flat no nível session)
     ws.send(JSON.stringify({
       type: 'session.update',
       session: {
-        type: 'realtime',
+        modalities: ['text', 'audio'],
         instructions: (INSTRUCTIONS[currentLang] || INSTRUCTIONS.BR) + recentCtx,
+        voice: getRealtimeVoice(),
+        input_audio_format: 'pcm16',
+        output_audio_format: 'pcm16',
+        input_audio_transcription: { model: 'whisper-1' },
+        turn_detection: {
+          type: 'server_vad',
+          threshold: 0.5,
+          prefix_padding_ms: 300,
+          silence_duration_ms: 700,
+          create_response: true,
+          interrupt_response: true
+        },
         tools,
         tool_choice: 'auto',
-        audio: {
-          input: {
-            turn_detection: {
-              type: 'server_vad',
-              threshold: 0.5,
-              prefix_padding_ms: 300,
-              silence_duration_ms: 700,
-              create_response: true,    // ← responde a tudo que o senhor falar
-              interrupt_response: true
-            },
-            transcription: { model: 'whisper-1' }
-          },
-          output: {
-            voice: getRealtimeVoice(),
-            speed: 1.0
-          }
-        }
+        temperature: 0.8
       }
     }));
 
@@ -1797,6 +1929,37 @@ TOM: senhor sempre. Parceiro leal. Confiante total.`,
     processor.onaudioprocess = (e) => {
       if (!realtimeActive || ws.readyState !== WebSocket.OPEN) return;
       const f32 = e.inputBuffer.getChannelData(0);
+
+      // ── Voz Identity: coleta durante cadastro / filtra durante verificação ──
+      if (isEnrolling || speakerCheckEnabled) {
+        const feat = extractSpeakerFeatures(f32);
+        if (isEnrolling) {
+          if (feat) enrollFrames.push(feat);
+        } else if (speakerCheckEnabled) {
+          if (feat && feat.voiced) {
+            const match = isSpeakerMatch(feat);
+            if (match !== null) {
+              speakerHistory.push(match);
+              if (speakerHistory.length > SPEAKER_WINDOW) speakerHistory.shift();
+            }
+          }
+          // Voz desconhecida → envia silêncio para OpenAI
+          if (!isOwnerSpeaking()) {
+            const now = Date.now();
+            if (now - _lastUnknownNotify > 6000) {
+              _lastUnknownNotify = now;
+              addTerminalLine('[voz] Voz desconhecida — aguardando o senhor.', 'warn-line');
+            }
+            const silence = new Int16Array(f32.length);
+            const sb = new Uint8Array(silence.buffer);
+            let b64s = '';
+            for (let i = 0; i < sb.length; i++) b64s += String.fromCharCode(sb[i]);
+            ws.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: btoa(b64s) }));
+            return;
+          }
+        }
+      }
+
       const pcm16 = new Int16Array(f32.length);
       for (let i = 0; i < f32.length; i++) pcm16[i] = Math.max(-32768, Math.min(32767, f32[i] * 32768));
       const bytes = new Uint8Array(pcm16.buffer);
@@ -1835,8 +1998,8 @@ TOM: senhor sempre. Parceiro leal. Confiante total.`,
           case 'response.done':
             setAvatarState('idle');
             rt2ResponseActive = false;
-            // Após JARVIS falar, bloqueia transcrição por 1.5s (evita capturar eco da própria voz)
-            window._rt2SuppressUntil = Date.now() + 1500;
+            // Após JARVIS falar, bloqueia transcrição por 3s (evita capturar eco da própria voz)
+            window._rt2SuppressUntil = Date.now() + 3000;
             break;
 
           case 'response.audio_transcript.delta':
@@ -2603,6 +2766,7 @@ initLangToggle();
 initConclaveToggle();
 initContinuousBtn();
 initRealtimeBtn();
+initVoiceIdentityBtn();
 
 // Realtime connects when user clicks mic — no auto-connect to save API calls
 
