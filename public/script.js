@@ -1884,7 +1884,11 @@ TOM: senhor sempre. Parceiro leal. Confiante total.`,
     }));
 
     // Mic capture → PCM16 → base64 → WebSocket
-    realtimeStream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 24000, channelCount: 1 } });
+    // echoCancellation ON: remove a própria voz do JARVIS captada pelo alto-falante (anti-eco)
+    realtimeStream = await navigator.mediaDevices.getUserMedia({ audio: {
+      sampleRate: 24000, channelCount: 1,
+      echoCancellation: true, noiseSuppression: true, autoGainControl: true
+    } });
     const audioCtx = new AudioContext({ sampleRate: 24000 });
     realtimeAudioCtx = audioCtx;
     const source = audioCtx.createMediaStreamSource(realtimeStream);
@@ -1892,6 +1896,18 @@ TOM: senhor sempre. Parceiro leal. Confiante total.`,
     processor.onaudioprocess = (e) => {
       if (!realtimeActive || ws.readyState !== WebSocket.OPEN) return;
       const f32 = e.inputBuffer.getChannelData(0);
+
+      // ── ANTI-ECO (camada 2): enquanto o JARVIS gera OU ainda reproduz áudio,
+      //    envia SILÊNCIO no lugar do mic. Impede a VAD de ouvir a própria voz e se auto-responder. ──
+      const stillPlaying = realtimePlaybackCtx && realtimePlaybackNextTime > realtimePlaybackCtx.currentTime + 0.05;
+      if (rt2ResponseActive || stillPlaying) {
+        const sil = new Int16Array(f32.length);
+        const sbb = new Uint8Array(sil.buffer);
+        let b64z = '';
+        for (let i = 0; i < sbb.length; i++) b64z += String.fromCharCode(sbb[i]);
+        ws.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: btoa(b64z) }));
+        return;
+      }
 
       // ── Voz Identity: coleta durante cadastro / filtra durante verificação ──
       if (isEnrolling || speakerCheckEnabled) {
