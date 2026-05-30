@@ -3160,7 +3160,7 @@ Exemplos: "abre o Spotify" → execute_task | "o que tem na tela?" → execute_t
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'gpt-4o-realtime-preview',
+        model: 'gpt-realtime-2',
         voice,
         instructions,
         turn_detection: { type: 'server_vad', threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 500 },
@@ -4075,7 +4075,7 @@ app.post('/api/health/preflight', async (req, res) => {
 
     // 2. Test OpenAI Realtime GA API (WebSocket proxy check — model list proxy)
     try {
-      const rtRes = await fetch('https://api.openai.com/v1/models/gpt-realtime-2025-08-28', {
+      const rtRes = await fetch('https://api.openai.com/v1/models/gpt-realtime-2', {
         headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` }
       });
       const rtData = await rtRes.json();
@@ -5193,7 +5193,7 @@ wss.on('connection', (clientWs, req) => {
   if (!apiKey) { clientWs.close(1011, 'No OpenAI API key'); return; }
 
   const url = new URL(req.url, 'http://localhost');
-  const model = url.searchParams.get('model') || 'gpt-realtime-2025-08-28';
+  const model = url.searchParams.get('model') || 'gpt-realtime-2';
 
   // Buffer: mensagens do cliente chegam antes da upstream abrir
   let upstreamReady = false;

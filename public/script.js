@@ -1695,9 +1695,9 @@ function startMeetingMode() {
   if (!realtimeActive) startRealtimeAlwaysOn();
   else if (realtimeWS?.readyState === WebSocket.OPEN) {
     realtimeWS.send(JSON.stringify({ type: 'session.update', session: {
-      turn_detection: { type: 'server_vad', threshold: 0.4,
+      audio: { input: { turn_detection: { type: 'server_vad', threshold: 0.4,
         prefix_padding_ms: 300, silence_duration_ms: 800,
-        create_response: false, interrupt_response: false }
+        create_response: false, interrupt_response: false } } }
     }}));
   }
 
@@ -1847,7 +1847,7 @@ TOM: senhor sempre. Parceiro leal. Confiante total.`,
     } catch {}
 
     // Connect via local WebSocket proxy (server adds OpenAI auth)
-    const ws = new WebSocket(`ws://${location.host}/ws/realtime?model=gpt-4o-realtime-preview`);
+    const ws = new WebSocket(`ws://${location.host}/ws/realtime?model=gpt-realtime-2`);
     realtimeWS = ws;
 
     await new Promise((resolve, reject) => {
@@ -1856,27 +1856,30 @@ TOM: senhor sempre. Parceiro leal. Confiante total.`,
       setTimeout(() => reject(new Error('Connection timeout (10s)')), 10000);
     });
 
-    // Configure session — GA API schema correto (campos flat no nível session)
+    // Configure session — schema GA aninhado (gpt-realtime-2)
     ws.send(JSON.stringify({
       type: 'session.update',
       session: {
-        modalities: ['text', 'audio'],
+        type: 'realtime',
         instructions: (INSTRUCTIONS[currentLang] || INSTRUCTIONS.BR) + recentCtx,
-        voice: getRealtimeVoice(),
-        input_audio_format: 'pcm16',
-        output_audio_format: 'pcm16',
-        input_audio_transcription: { model: 'whisper-1' },
-        turn_detection: {
-          type: 'server_vad',
-          threshold: 0.5,
-          prefix_padding_ms: 300,
-          silence_duration_ms: 700,
-          create_response: true,
-          interrupt_response: true
-        },
         tools,
         tool_choice: 'auto',
-        temperature: 0.8
+        audio: {
+          input: {
+            turn_detection: {
+              type: 'server_vad',
+              threshold: 0.5,
+              prefix_padding_ms: 300,
+              silence_duration_ms: 700,
+              create_response: true,
+              interrupt_response: true
+            },
+            transcription: { model: 'whisper-1' }
+          },
+          output: {
+            voice: getRealtimeVoice()
+          }
+        }
       }
     }));
 
